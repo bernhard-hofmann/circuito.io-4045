@@ -1,10 +1,10 @@
 // Include Libraries
 #include "Arduino.h"
-#include "LiquidCrystal_PCF8574.h"
-#include "LDR.h"
-#include "Button.h"
-#include "Relay.h"
-#include "SoilMoisture.h"
+#include "./LiquidCrystal_PCF8574.h"
+#include "./LDR.h"
+#include "./Button.h"
+#include "./Relay.h"
+#include "./SoilMoisture.h"
 
 // Pin Definitions
 #define LDR_PIN_SIG	A3
@@ -39,6 +39,10 @@ SoilMoisture soilMoisture_5v(SOILMOISTURE_5V_PIN_SIG);
 // Setup the essentials for your circuit to work. It runs first every time your circuit is powered with electricity.
 void setup()
 {
+  Serial.begin(9600);
+  while (!Serial) ; // wait for serial port to connect. Needed for native USB
+  Serial.println("Started");
+
   // initialize the lcd
   lcdI2C.begin(LCD_COLUMNS, LCD_ROWS, LCD_ADDRESS, BACKLIGHT);
   ldrAverageLight = ldr.readAverage();
@@ -51,6 +55,7 @@ void setup()
 
 void runDiagnostics()
 {
+  Serial.println("## Diagnostics");
   char buf[21];
 
   // Show the diagnostics on the LCD
@@ -65,6 +70,7 @@ void runDiagnostics()
   sprintf(buf, "LDR: %04d       ", ldrSample);
   lcdI2C.selectLine(2);
   lcdI2C.print(buf);
+  Serial.println(buf);
   delay(1000);
 
   // Push buttons
@@ -74,11 +80,13 @@ void runDiagnostics()
   sprintf(buf, "Buttons: %01d%01d%01d", pushButton_1Val, pushButton_2Val, pushButton_3Val);
   lcdI2C.selectLine(2);
   lcdI2C.print(buf);
+  Serial.println(buf);
   delay(1000);
 
   // Relay Module - Test Code
   lcdI2C.selectLine(2);
   lcdI2C.print("Relay test...   ");
+  Serial.println("Relay test");
   relayModule.on();      // 1. turns on
   delay(50);             // 2. waits 500 milliseconds (0.5 sec). Change the value in the brackets (500) for a longer or shorter delay in milliseconds.
   relayModule.off();     // 3. turns off.
@@ -89,6 +97,7 @@ void runDiagnostics()
   sprintf(buf, "Moisture: %04d  ", soilMoisture_5vVal);
   lcdI2C.selectLine(2);
   lcdI2C.print(buf);
+  Serial.println(buf);
   delay(1000);
 }
 
