@@ -1,10 +1,10 @@
 // Include Libraries
 #include "Arduino.h"
-#include "./LiquidCrystal_PCF8574.h"
-#include "./LDR.h"
-#include "./Button.h"
-#include "./Relay.h"
-#include "./SoilMoisture.h"
+#include "LiquidCrystal_PCF8574.h"
+#include "LDR.h"
+#include "Button.h"
+#include "Relay.h"
+#include "SoilMoisture.h"
 
 // Operating parameters
 #define LDR_MAX_LIGHT 800
@@ -143,12 +143,12 @@ void loop()
     }
     else
     {
-      Serial.println(F"No need to water at this time.");
+      Serial.println("No need to water at this time.");
     }
   }
   else
   {
-    Serial.println(F"Not dark enough to water at this time.");
+    Serial.println("Not dark enough to water at this time.");
   }
 
   // Give the water time to soak in, or wait until it's dark enough and the soil is dry enough
