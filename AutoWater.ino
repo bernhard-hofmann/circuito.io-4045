@@ -6,6 +6,12 @@
 #include "./Relay.h"
 #include "./SoilMoisture.h"
 
+// Operating parameters
+#define LDR_MAX_LIGHT 800
+#define TARGET_MOISTURE_LEVEL 512
+#define WATERING_TIME_MS 3000
+#define POLL_DELAY_MS 60000
+
 // Pin Definitions
 #define LDR_PIN_SIG	A3
 #define PUSHBUTTON_1_PIN_2	2
@@ -36,6 +42,8 @@ Button pushButton_3(PUSHBUTTON_3_PIN_2);
 Relay relayModule(RELAYMODULE_PIN_SIGNAL);
 SoilMoisture soilMoisture_5v(SOILMOISTURE_5V_PIN_SIG);
 
+char buf[21];
+
 // Setup the essentials for your circuit to work. It runs first every time your circuit is powered with electricity.
 void setup()
 {
@@ -56,7 +64,6 @@ void setup()
 void runDiagnostics()
 {
   Serial.println("## Diagnostics");
-  char buf[21];
 
   // Show the diagnostics on the LCD
   lcdI2C.clear();                    // Clear LCD screen.
@@ -101,9 +108,49 @@ void runDiagnostics()
   delay(1000);
 }
 
-// Main logic of your circuit. It defines the interaction between the components you selected. After setup, it runs over and over again, in an eternal loop.
 void loop()
 {
-  runDiagnostics();
-  delay(1000);
+  // Read the sensor values
+  // Returned values: from 0 (no light) to 1023 (maximal light). - Works in ambient Light, regular daylight.
+  int ldrSample = ldr.read();
+  // Returned Values: from 0 (completely dry) to 1023 (completely moist). (air/soil humidity - ambient conditions).
+  int soilMoisture_5vVal = soilMoisture_5v.read();
+
+  // Show the sensor values
+  lcdI2C.clear();
+  sprintf(buf, "LDR: %04d       ", ldrSample);
+  lcdI2C.print(buf);
+  Serial.println(buf);
+
+  lcdI2C.selectLine(2);
+  sprintf(buf, "Moisture: %04d  ", soilMoisture_5vVal);
+  lcdI2C.print(buf);
+  Serial.println(buf);
+
+  // If it's dark enough, and the moisture level is below the target, turn the pump on for the specified duration
+  if (ldrSample < LDR_MAX_LIGHT)
+  {
+    if (soilMoisture_5vVal < TARGET_MOISTURE_LEVEL)
+    {
+      lcdI2C.selectLine(1);
+      sprintf(buf, "Watering...     ");
+      lcdI2C.print(buf);
+      Serial.println(buf);
+
+      relayModule.on();
+      delay(WATERING_TIME_MS);
+      relayModule.off();
+    }
+    else
+    {
+      Serial.println(F"No need to water at this time.");
+    }
+  }
+  else
+  {
+    Serial.println(F"Not dark enough to water at this time.");
+  }
+
+  // Give the water time to soak in, or wait until it's dark enough and the soil is dry enough
+  delay(POLL_DELAY_MS);
 }
