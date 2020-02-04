@@ -1,14 +1,15 @@
 // Include Libraries
 #include "Arduino.h"
-#include "./LiquidCrystal_PCF8574.h"
-#include "./LDR.h"
-#include "./Button.h"
-#include "./Relay.h"
-#include "./SoilMoisture.h"
+#include "LiquidCrystal_PCF8574.h"
+#include "LDR.h"
+#include "Button.h"
+#include "Relay.h"
+#include "SoilMoisture.h"
 
 // Operating parameters
 #define LDR_MAX_LIGHT 800
 #define TARGET_MOISTURE_LEVEL 512
+#define MIN_MOISTURE_LEVEL 300
 #define WATERING_TIME_MS 3000
 #define POLL_DELAY_MS 60000
 
@@ -116,6 +117,11 @@ void loop()
   // Returned Values: from 0 (completely dry) to 1023 (completely moist). (air/soil humidity - ambient conditions).
   int soilMoisture_5vVal = soilMoisture_5v.read();
 
+  if (soilMoisture_5vVal < MIN_MOISTURE_LEVEL)
+  {
+    Serial.println("Moisture level is below the minimum!");
+  }
+
   // Show the sensor values
   lcdI2C.clear();
   sprintf(buf, "LDR: %04d       ", ldrSample);
@@ -128,7 +134,7 @@ void loop()
   Serial.println(buf);
 
   // If it's dark enough, and the moisture level is below the target, turn the pump on for the specified duration
-  if (ldrSample < LDR_MAX_LIGHT)
+  if (soilMoisture_5vVal < MIN_MOISTURE_LEVEL || ldrSample < LDR_MAX_LIGHT)
   {
     if (soilMoisture_5vVal < TARGET_MOISTURE_LEVEL)
     {
@@ -143,12 +149,12 @@ void loop()
     }
     else
     {
-      Serial.println(F"No need to water at this time.");
+      Serial.println("No need to water at this time.");
     }
   }
   else
   {
-    Serial.println(F"Not dark enough to water at this time.");
+    Serial.println("Not dark enough to water at this time.");
   }
 
   // Give the water time to soak in, or wait until it's dark enough and the soil is dry enough
