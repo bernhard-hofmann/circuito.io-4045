@@ -8,8 +8,8 @@
 
 // Operating parameters
 #define LDR_MAX_LIGHT 800
-#define TARGET_MOISTURE_LEVEL 512
-#define MIN_MOISTURE_LEVEL 300
+#define TARGET_MOISTURE_LEVEL 400
+#define DANGER_MOISTURE_LEVEL 800
 #define WATERING_TIME_MS 3000
 #define POLL_DELAY_MS 60000
 
@@ -116,10 +116,19 @@ void loop()
   int ldrSample = ldr.read();
   // Returned Values: from 0 (completely dry) to 1023 (completely moist). (air/soil humidity - ambient conditions).
   int soilMoisture_5vVal = soilMoisture_5v.read();
+  bool isInvertedSensor = false;
+  bool mustWater = false;
 
-  if (soilMoisture_5vVal < MIN_MOISTURE_LEVEL)
+  if (TARGET_MOISTURE_LEVEL < DANGER_MOISTURE_LEVEL)
+  {
+    // Moisture sensor reports higher values for dry soil and lower values for wet soil
+    isInvertedSensor = true;
+  }
+
+  if (soilMoisture_5vVal < DANGER_MOISTURE_LEVEL || (isInvertedSensor && soilMoisture_5vVal > DANGER_MOISTURE_LEVEL))
   {
     Serial.println("Moisture level is below the minimum!");
+    mustWater = true;
   }
 
   // Show the sensor values
@@ -134,9 +143,9 @@ void loop()
   Serial.println(buf);
 
   // If it's dark enough, and the moisture level is below the target, turn the pump on for the specified duration
-  if (soilMoisture_5vVal < MIN_MOISTURE_LEVEL || ldrSample < LDR_MAX_LIGHT)
+  if (mustWater || ldrSample < LDR_MAX_LIGHT)
   {
-    if (soilMoisture_5vVal < TARGET_MOISTURE_LEVEL)
+    if (soilMoisture_5vVal < TARGET_MOISTURE_LEVEL || (isInvertedSensor && soilMoisture_5vVal > TARGET_MOISTURE_LEVEL))
     {
       lcdI2C.selectLine(1);
       sprintf(buf, "Watering...     ");
