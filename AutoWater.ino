@@ -125,7 +125,7 @@ void loop()
     isInvertedSensor = true;
   }
 
-  if (soilMoisture_5vVal < DANGER_MOISTURE_LEVEL || (isInvertedSensor && soilMoisture_5vVal > DANGER_MOISTURE_LEVEL))
+  if ((!isInvertedSensor && soilMoisture_5vVal < DANGER_MOISTURE_LEVEL) || (isInvertedSensor && soilMoisture_5vVal > DANGER_MOISTURE_LEVEL))
   {
     Serial.println("Moisture level is below the minimum!");
     mustWater = true;
@@ -145,7 +145,7 @@ void loop()
   // If it's dark enough, and the moisture level is below the target, turn the pump on for the specified duration
   if (mustWater || ldrSample < LDR_MAX_LIGHT)
   {
-    if (soilMoisture_5vVal < TARGET_MOISTURE_LEVEL || (isInvertedSensor && soilMoisture_5vVal > TARGET_MOISTURE_LEVEL))
+    if ((!isInvertedSensor && soilMoisture_5vVal < TARGET_MOISTURE_LEVEL) || (isInvertedSensor && soilMoisture_5vVal > TARGET_MOISTURE_LEVEL))
     {
       lcdI2C.selectLine(1);
       sprintf(buf, "Watering...     ");
