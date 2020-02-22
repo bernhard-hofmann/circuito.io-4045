@@ -8,7 +8,7 @@
 #include "SoilMoisture.h"
 
 // Operating parameters
-#define LDR_MAX_LIGHT 800
+#define LDR_MAX_LIGHT 50
 #define TARGET_MOISTURE_LEVEL 400
 #define DANGER_MOISTURE_LEVEL 800
 #define WATERING_TIME_MS 3000
