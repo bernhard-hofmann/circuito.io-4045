@@ -1,5 +1,6 @@
 // Include Libraries
 #include "Arduino.h"
+#include "DHT.h"
 #include "LiquidCrystal_PCF8574.h"
 #include "LDR.h"
 #include "Button.h"
@@ -14,11 +15,12 @@
 #define POLL_DELAY_MS 60000
 
 // Pin Definitions
+#define DHT_PIN_DATA	2
 #define LDR_PIN_SIG	A3
-#define PUSHBUTTON_1_PIN_2	2
-#define PUSHBUTTON_2_PIN_2	3
-#define PUSHBUTTON_3_PIN_2	4
-#define RELAYMODULE_PIN_SIGNAL	5
+#define PUSHBUTTON_1_PIN_2	3
+#define PUSHBUTTON_2_PIN_2	4
+#define PUSHBUTTON_3_PIN_2	5
+#define RELAYMODULE_PIN_SIGNAL	6
 #define SOILMOISTURE_5V_PIN_SIG	A1
 
 // Global variables and defines
@@ -35,6 +37,7 @@
 #define THRESHOLD_ldr   100
 int ldrAverageLight;
 // object initialization
+DHT dht(DHT_PIN_DATA);
 LiquidCrystal_PCF8574 lcdI2C;
 LDR ldr(LDR_PIN_SIG);
 Button pushButton_1(PUSHBUTTON_1_PIN_2);
@@ -42,6 +45,13 @@ Button pushButton_2(PUSHBUTTON_2_PIN_2);
 Button pushButton_3(PUSHBUTTON_3_PIN_2);
 Relay relayModule(RELAYMODULE_PIN_SIGNAL);
 SoilMoisture soilMoisture_5v(SOILMOISTURE_5V_PIN_SIG);
+
+enum OperationMode {
+  Normal,
+  Menu,
+  Test
+};
+OperationMode mode = Normal;
 
 char buf[21];
 
@@ -52,6 +62,7 @@ void setup()
   while (!Serial) ; // wait for serial port to connect. Needed for native USB
   Serial.println("Started");
 
+  dht.begin();
   // initialize the lcd
   lcdI2C.begin(LCD_COLUMNS, LCD_ROWS, LCD_ADDRESS, BACKLIGHT);
   ldrAverageLight = ldr.readAverage();
@@ -112,6 +123,20 @@ void runDiagnostics()
 void loop()
 {
   // Read the sensor values
+
+  // DHT22/11 Humidity and Temperature Sensor
+  // Reading humidity in %
+  float dhtHumidity = dht.readHumidity();
+  // Read temperature in Celsius, for Fahrenheit use .readTempF()
+  float dhtTempC = dht.readTempC();
+  Serial.print(F("Humidity: ")); Serial.print(dhtHumidity); Serial.print(F(" [%]\t"));
+  Serial.print(F("Temp: ")); Serial.print(dhtTempC); Serial.println(F(" [C]"));
+
+  bool isMenuButtonPressed = pushButton_1.read();
+  if (isMenuButtonPressed) {
+    mode = Menu;
+  }
+
   // Returned values: from 0 (no light) to 1023 (maximal light). - Works in ambient Light, regular daylight.
   int ldrSample = ldr.read();
   // Returned Values: from 0 (completely dry) to 1023 (completely moist). (air/soil humidity - ambient conditions).
