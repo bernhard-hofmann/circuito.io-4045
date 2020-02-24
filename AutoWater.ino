@@ -8,20 +8,24 @@
 #include "SoilMoisture.h"
 
 // Operating parameters
-#define LDR_MAX_LIGHT 50
-#define TARGET_MOISTURE_LEVEL 400
-#define DANGER_MOISTURE_LEVEL 800
-#define WATERING_TIME_MS 3000
-#define POLL_DELAY_MS 60000
+#define LDR_MAX_LIGHT 50             // Determines whether it's day/night (light/dark).  0 (no light) to 1023 (maximal light)
+#define TARGET_MOISTURE_LEVEL 400    // Add water if the moisture level goes above this level and it's dark.
+#define DANGER_MOISTURE_LEVEL 800    // Water even during the day (or when it's light) if the moistue level goes above this value.
+#define WATERING_TIME_MS 3000        // How long to leave the watering relay on for when adding water.
+#define POLL_DELAY_MS 60000          // How frequently to read the sensors, update the display, and control the fan and watering relays.
+#define FAN_ON_TEMP_C      26        // Temperatures above this value will switch the fan on.
+#define FAN_ON_HUMIDITY_PC 50        // Humidity levels above this value will switch the fan on.
+#define MIN_FAN_ON_TIME_MS 10000     // The minimum duration the fan should stay on for (prevents thrashing the relay when the conditions waver between on and off values.
 
 // Pin Definitions
-#define DHT_PIN_DATA	2
-#define LDR_PIN_SIG	A3
-#define PUSHBUTTON_1_PIN_2	3
-#define PUSHBUTTON_2_PIN_2	4
-#define PUSHBUTTON_3_PIN_2	5
-#define RELAYMODULE_PIN_SIGNAL	6
-#define SOILMOISTURE_5V_PIN_SIG	A1
+#define DHT_PIN_DATA                 2
+#define LDR_PIN_SIG                  A3
+#define PUSHBUTTON_1_PIN_2           3
+#define PUSHBUTTON_2_PIN_2           4
+#define PUSHBUTTON_3_PIN_2           5
+#define WATER_RELAYMODULE_PIN_SIGNAL 6
+#define FAN_RELAYMODULE_PIN_SIGNAL   7
+#define SOILMOISTURE_5V_PIN_SIG      A1
 
 // Global variables and defines
 // There are several different versions of the LCD I2C adapter, each might have a different address.
@@ -43,15 +47,10 @@ LDR ldr(LDR_PIN_SIG);
 Button pushButton_1(PUSHBUTTON_1_PIN_2);
 Button pushButton_2(PUSHBUTTON_2_PIN_2);
 Button pushButton_3(PUSHBUTTON_3_PIN_2);
-Relay relayModule(RELAYMODULE_PIN_SIGNAL);
+Relay WaterRelayModule(WATER_RELAYMODULE_PIN_SIGNAL);
+Relay FanRelayModule(FAN_RELAYMODULE_PIN_SIGNAL);
 SoilMoisture soilMoisture_5v(SOILMOISTURE_5V_PIN_SIG);
-
-enum OperationMode {
-  Normal,
-  Menu,
-  Test
-};
-OperationMode mode = Normal;
+unsigned long fanOnMillis = 0;
 
 char buf[21];
 
@@ -60,7 +59,7 @@ void setup()
 {
   Serial.begin(9600);
   while (!Serial) ; // wait for serial port to connect. Needed for native USB
-  Serial.println("Started");
+  Serial.println(F("Started"));
 
   dht.begin();
   // initialize the lcd
@@ -75,13 +74,13 @@ void setup()
 
 void runDiagnostics()
 {
-  Serial.println("## Diagnostics");
+  Serial.println(F("## Diagnostics"));
 
   // Show the diagnostics on the LCD
   lcdI2C.clear();                    // Clear LCD screen.
-  lcdI2C.print("AutoWater:TEST");    // Print print String to LCD on first line
+  lcdI2C.print(F("AutoWater:TEST")); // Print print String to LCD on first line
   lcdI2C.selectLine(2);              // Set cursor at the begining of line 2
-  lcdI2C.print("Starting...");       // Print print String to LCD on second line
+  lcdI2C.print(F("Starting..."));    // Print print String to LCD on second line
   delay(1000);
 
   // LDR (Mini Photocell)
@@ -102,40 +101,48 @@ void runDiagnostics()
   Serial.println(buf);
   delay(1000);
 
-  // Relay Module - Test Code
+  // Water Relay Module - Test Code
   lcdI2C.selectLine(2);
-  lcdI2C.print("Relay test...   ");
-  Serial.println("Relay test");
-  relayModule.on();      // 1. turns on
-  delay(50);             // 2. waits 500 milliseconds (0.5 sec). Change the value in the brackets (500) for a longer or shorter delay in milliseconds.
-  relayModule.off();     // 3. turns off.
-  delay(50);             // 4. waits 500 milliseconds (0.5 sec). Change the value in the brackets (500) for a longer or shorter delay in milliseconds.
+  Serial.println(F("Water relay test"));
+  lcdI2C.print(F("Water ON        "));
+  WaterRelayModule.on();    // 1. turns on
+  delay(500);               // 2. waits 500 milliseconds (0.5 sec). Change the value in the brackets (500) for a longer or shorter delay in milliseconds.
+  lcdI2C.print(F("Water OFF       "));
+  WaterRelayModule.off();   // 3. turns off.
+  delay(500);               // 4. waits 500 milliseconds (0.5 sec). Change the value in the brackets (500) for a longer or shorter delay in milliseconds.
+
+  // Fan Relay Module - Test Code
+  lcdI2C.selectLine(2);
+  Serial.println(F("Fan relay test"));
+  lcdI2C.print(F("Fan ON          "));
+  FanRelayModule.on();      // 1. turns on
+  delay(500);               // 2. waits 500 milliseconds (0.5 sec). Change the value in the brackets (500) for a longer or shorter delay in milliseconds.
+  lcdI2C.print(F("Fan OFF         "));
+  FanRelayModule.off();     // 3. turns off.
+  delay(500);               // 4. waits 500 milliseconds (0.5 sec). Change the value in the brackets (500) for a longer or shorter delay in milliseconds.
 
   // Soil Moisture Sensor - Test Code
   int soilMoisture_5vVal = soilMoisture_5v.read();
   sprintf(buf, "Moisture: %04d  ", soilMoisture_5vVal);
-  lcdI2C.selectLine(2);
   lcdI2C.print(buf);
   Serial.println(buf);
+  delay(1000);
+
+  float dhtHumidity = dht.readHumidity();
+  float dhtTempC = dht.readTempC();
+  Serial.print(F("Humidity: ")); Serial.print(dhtHumidity); Serial.println(F("%"));
+  Serial.print(F("Temp (C): ")); Serial.println(dhtTempC);
+  sprintf(buf, "Humidity: %04d  ", dhtHumidity);
+  lcdI2C.print(buf);
+  delay(1000);
+  sprintf(buf, "Temp: %04dC     ", dhtTempC);
+  lcdI2C.print(buf);
   delay(1000);
 }
 
 void loop()
 {
-  // Read the sensor values
-
-  // DHT22/11 Humidity and Temperature Sensor
-  // Reading humidity in %
-  float dhtHumidity = dht.readHumidity();
-  // Read temperature in Celsius, for Fahrenheit use .readTempF()
-  float dhtTempC = dht.readTempC();
-  Serial.print(F("Humidity: ")); Serial.print(dhtHumidity); Serial.print(F(" [%]\t"));
-  Serial.print(F("Temp: ")); Serial.print(dhtTempC); Serial.println(F(" [C]"));
-
-  bool isMenuButtonPressed = pushButton_1.read();
-  if (isMenuButtonPressed) {
-    mode = Menu;
-  }
+  FanControl();
 
   // Returned values: from 0 (no light) to 1023 (maximal light). - Works in ambient Light, regular daylight.
   int ldrSample = ldr.read();
@@ -152,7 +159,7 @@ void loop()
 
   if ((!isInvertedSensor && soilMoisture_5vVal < DANGER_MOISTURE_LEVEL) || (isInvertedSensor && soilMoisture_5vVal > DANGER_MOISTURE_LEVEL))
   {
-    Serial.println("Moisture level is below the minimum!");
+    Serial.println(F("Moisture level is below the minimum!"));
     mustWater = true;
   }
 
@@ -177,20 +184,60 @@ void loop()
       lcdI2C.print(buf);
       Serial.println(buf);
 
-      relayModule.on();
+      WaterRelayModule.on();
       delay(WATERING_TIME_MS);
-      relayModule.off();
+      WaterRelayModule.off();
     }
     else
     {
-      Serial.println("No need to water at this time.");
+      Serial.println(F("No need to water at this time."));
     }
   }
   else
   {
-    Serial.println("Not dark enough to water at this time.");
+    Serial.println(F("Not dark enough to water at this time."));
   }
 
   // Give the water time to soak in, or wait until it's dark enough and the soil is dry enough
   delay(POLL_DELAY_MS);
+}
+
+void FanControl()
+{
+  // Prevent the fan switching on and off too often. If the time now is past when the fan was turned
+  // on plus the minimum on time, or the time now is before the fan was turned on (can happen when
+  // millis overflows, approximately every 50 days).
+  //
+  // fanOnMillis is set to 0 when it's turned off to allow checking the humidity and temperature
+  // whenever the fan is off.
+  unsigned long msNow = millis();
+  if (fanOnMillis != 0 && msNow < fanOnMillis + MIN_FAN_ON_TIME_MS && msNow > fanOnMillis) {
+    return;
+  }
+
+  // Read sensor values
+  // DHT22/11 Humidity and Temperature Sensor
+  // Reading humidity in %
+  float dhtHumidity = dht.readHumidity();
+  // Read temperature in Celsius, for Fahrenheit use .readTempF()
+  float dhtTempC = dht.readTempC();
+  Serial.print(F("Humidity: ")); Serial.print(dhtHumidity); Serial.print(F(" [%]\t"));
+  Serial.print(F("Temp (C): ")); Serial.print(dhtTempC); Serial.println(F(" [C]"));
+  bool turnFanOn = false;
+
+  if (dhtTempC > FAN_ON_TEMP_C) {
+    turnFanOn = true;
+  }
+
+  if (dhtTempC > FAN_ON_TEMP_C || dhtHumidity > FAN_ON_HUMIDITY_PC) {
+    turnFanOn = true;
+  }
+
+  if (turnFanOn) {
+    FanRelayModule.on();
+    fanOnMillis = msNow;
+  } else {
+    FanRelayModule.off();
+    fanOnMillis = 0;
+  }
 }
