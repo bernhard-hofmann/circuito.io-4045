@@ -1,8 +1,9 @@
 // Include Libraries
 #include "Arduino.h"
 #include "DHT.h"
-#include "LiquidCrystal_PCF8574.h"
 #include "LDR.h"
+#include "Adafruit_GFX.h"
+#include "Adafruit_PCD8544.h"
 #include "Button.h"
 #include "Relay.h"
 #include "SoilMoisture.h"
@@ -20,30 +21,31 @@
 // Pin Definitions
 #define DHT_PIN_DATA                 2
 #define LDR_PIN_SIG                  A3
-#define PUSHBUTTON_1_PIN_2           3
-#define PUSHBUTTON_2_PIN_2           4
-#define PUSHBUTTON_3_PIN_2           5
-#define WATER_RELAYMODULE_PIN_SIGNAL 6
-#define FAN_RELAYMODULE_PIN_SIGNAL   7
-#define SOILMOISTURE_5V_PIN_SIG      A1
+#define NOKIALCD_PIN_CS               3
+#define NOKIALCD_PIN_RST              5
+#define NOKIALCD_PIN_DC               4
+#define PUSHBUTTON_1_PIN_2            6
+#define PUSHBUTTON_2_PIN_2            7
+#define PUSHBUTTON_3_PIN_2            8
+#define WATER_RELAYMODULE_PIN_SIGNAL  9
+#define FAN_RELAYMODULE_PIN_SIGNAL   10
+#define SOILMOISTURE_5V_PIN_SIG      A4
+
+
 
 // Global variables and defines
-// There are several different versions of the LCD I2C adapter, each might have a different address.
-// Try the given addresses by Un/commenting the following rows until LCD works follow the serial monitor prints.
-// To find your LCD address go to: http://playground.arduino.cc/Main/I2cScanner and run example.
-//#define LCD_ADDRESS 0x3F
-#define LCD_ADDRESS 0x27
-// Define LCD characteristics
-#define LCD_ROWS 4
-#define LCD_COLUMNS 20
-#define SCROLL_DELAY 150
-#define BACKLIGHT 255
 #define THRESHOLD_ldr   100
 int ldrAverageLight;
+
+//define Nokia LCD contrast and dimentions(in pixels)
+#define LCD_CONTRAST 60
+#define LCD_SIZE_COL 84
+#define LCD_SIZE_ROW 48
+
 // object initialization
 DHT dht(DHT_PIN_DATA);
-LiquidCrystal_PCF8574 lcd;
 LDR ldr(LDR_PIN_SIG);
+Adafruit_PCD8544 nokiaLcd(NOKIALCD_PIN_DC, NOKIALCD_PIN_CS, NOKIALCD_PIN_RST);
 Button pushButton_1(PUSHBUTTON_1_PIN_2);
 Button pushButton_2(PUSHBUTTON_2_PIN_2);
 Button pushButton_3(PUSHBUTTON_3_PIN_2);
@@ -66,9 +68,11 @@ void setup()
   Serial.println(F("Started"));
 
   dht.begin();
-  // initialize the lcd
-  lcd.begin(LCD_COLUMNS, LCD_ROWS, LCD_ADDRESS, BACKLIGHT);
-  ldrAverageLight = ldr.readAverage();
+
+  //Initialize Nokia instance
+  nokiaLcd.begin(LCD_SIZE_COL, LCD_SIZE_ROW);
+  nokiaLcd.setContrast(LCD_CONTRAST); //Adjust display contrast
+
   pushButton_1.init();
   pushButton_2.init();
   pushButton_3.init();
@@ -81,67 +85,60 @@ void runDiagnostics()
   Serial.println(F("## Diagnostics"));
 
   // Show the diagnostics on the LCD
-  lcd.clear();                    // Clear LCD screen.
-  lcd.print(F("AutoWater:TEST")); // Print print String to LCD on first line
-  lcd.selectLine(2);              // Set cursor at the begining of line 2
-  lcd.print(F("Starting..."));    // Print print String to LCD on second line
-  delay(1000);
+  nokiaLcd.clearDisplay();
+  nokiaLcd.setTextColor(BLACK);
+  nokiaLcd.setTextSize(1);
+  nokiaLcd.println(F("AutoWater:TEST"));
 
   // LDR (Mini Photocell)
   ldrValue = ldr.read();
   sprintf(buf, "LDR: %04d", ldrValue);
-  lcd.selectLine(2);
-  lcd.print(buf);
+  nokiaLcd.println(buf);
   Serial.println(buf);
-  delay(1000);
-
-  // Push buttons
-  bool pushButton_1Val = pushButton_1.read();
-  bool pushButton_2Val = pushButton_2.read();
-  bool pushButton_3Val = pushButton_3.read();
-  sprintf(buf, "Buttons: %01d%01d%01d   ", pushButton_1Val, pushButton_2Val, pushButton_3Val);
-  lcd.selectLine(2);
-  lcd.print(buf);
-  Serial.println(buf);
-  delay(1000);
+  nokiaLcd.display();
 
   // Water Relay Module - Test Code
-  lcd.selectLine(2);
   Serial.println(F("Water relay test"));
-  lcd.print(F("Water ON        "));
+  nokiaLcd.println(F("Water ON"));
+  nokiaLcd.display();
   WaterRelayModule.on();    // 1. turns on
   delay(500);               // 2. waits 500 milliseconds (0.5 sec). Change the value in the brackets (500) for a longer or shorter delay in milliseconds.
-  lcd.print(F("Water OFF       "));
+  nokiaLcd.println(F("Water OFF"));
+  nokiaLcd.display();
   WaterRelayModule.off();   // 3. turns off.
   delay(500);               // 4. waits 500 milliseconds (0.5 sec). Change the value in the brackets (500) for a longer or shorter delay in milliseconds.
 
   // Fan Relay Module - Test Code
-  lcd.selectLine(2);
   Serial.println(F("Fan relay test"));
-  lcd.print(F("Fan ON          "));
+  nokiaLcd.println(F("Fan ON"));
+  nokiaLcd.display();
   FanRelayModule.on();      // 1. turns on
   delay(500);               // 2. waits 500 milliseconds (0.5 sec). Change the value in the brackets (500) for a longer or shorter delay in milliseconds.
-  lcd.print(F("Fan OFF         "));
+  nokiaLcd.println(F("Fan OFF"));
+  nokiaLcd.display();
   FanRelayModule.off();     // 3. turns off.
   delay(500);               // 4. waits 500 milliseconds (0.5 sec). Change the value in the brackets (500) for a longer or shorter delay in milliseconds.
 
   // Soil Moisture Sensor - Test Code
   int soilMoisture_5vVal = soilMoisture_5v.read();
   sprintf(buf, "Moisture: %04d  ", soilMoisture_5vVal);
-  lcd.print(buf);
   Serial.println(buf);
-  delay(1000);
+  nokiaLcd.println(buf);
+  nokiaLcd.display();
+  delay(500);
 
   dhtHumidity = dht.readHumidity();
   dhtTempC = dht.readTempC();
   Serial.print(F("Humidity: ")); Serial.print(dhtHumidity); Serial.println(F("%"));
   Serial.print(F("Temp (C): ")); Serial.println(dhtTempC);
   sprintf(buf, "Humidity: %04d  ", dhtHumidity);
-  lcd.print(buf);
-  delay(1000);
+  nokiaLcd.println(buf);
+  nokiaLcd.display();
+  delay(500);
   sprintf(buf, "Temp: %04dC     ", dhtTempC);
-  lcd.print(buf);
-  delay(1000);
+  nokiaLcd.println(buf);
+  nokiaLcd.display();
+  delay(500);
 }
 
 void loop()
@@ -175,14 +172,14 @@ void loop()
   {
     if ((!isInvertedSensor && soilMoistureValue < TARGET_MOISTURE_LEVEL) || (isInvertedSensor && soilMoistureValue > TARGET_MOISTURE_LEVEL))
     {
-      lcd.selectLine(1);
-      sprintf(buf, "Watering...     ");
-      lcd.print(buf);
-      Serial.println(buf);
+      nokiaLcd.clearDisplay();
+      nokiaLcd.println(F("Watering..."));
+      Serial.println(F("Watering..."));
 
       WaterRelayModule.on();
       delay(WATERING_TIME_MS);
       WaterRelayModule.off();
+      ShowSensorValues();
     }
     else
     {
@@ -200,23 +197,22 @@ void loop()
 
 void ShowSensorValues()
 {
-  lcd.clear();
+  nokiaLcd.clearDisplay();
   sprintf(buf, "Light   : %04d", ldrValue);
-  lcd.print(buf);
+  nokiaLcd.println(buf);
   Serial.println(buf);
 
-  lcd.selectLine(2);
   sprintf(buf, "Moisture: %04d", soilMoistureValue);
-  lcd.print(buf);
+  nokiaLcd.println(buf);
   Serial.println(buf);
 
-  lcd.selectLine(3);
   sprintf(buf, "Humidity: %04d", dhtHumidity);
-  lcd.print(buf);
+  nokiaLcd.println(buf);
 
-  lcd.selectLine(4);
   sprintf(buf, "Temp    : %04dC", dhtTempC);
-  lcd.print(buf);
+  nokiaLcd.println(buf);
+
+  nokiaLcd.display();
 }
 
 void FanControl()
